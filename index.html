@@ -1079,22 +1079,23 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
           ' ' + pad2(date.getHours()) + ':' + pad2(date.getMinutes()) + ':' + pad2(date.getSeconds());
       }
 
-      function makeSessionId() {
+      async function makeSessionId() {
         var now = new Date();
-        var stamp = String(now.getFullYear()) + pad2(now.getMonth() + 1) + pad2(now.getDate()) +
-          pad2(now.getHours()) + pad2(now.getMinutes()) + pad2(now.getSeconds());
-        var random = '';
-        if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
-          var bytes = new Uint8Array(4);
-          window.crypto.getRandomValues(bytes);
-          for (var i = 0; i < bytes.length; i += 1) {
-            random += bytes[i].toString(36).padStart(2, '0');
-          }
-          random = random.slice(0, 6).toUpperCase();
-        } else {
-          random = Math.random().toString(36).slice(2, 8).toUpperCase();
+        var base = 'S' + now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate());
+        try {
+          var doc = await loadStore();
+          var used = Object.create(null);
+          Object.keys(doc.sessions || {}).forEach(function (key) {
+            if (key.indexOf(base + '-') !== 0) { return; }
+            var seq = parseInt(key.slice(base.length + 1), 10);
+            if (seq > 0) { used[seq] = true; }
+          });
+          var seq = 1;
+          while (used[seq]) { seq += 1; }
+          return base + '-' + seq;
+        } catch (error) {
+          return base + '-' + pad2(now.getHours()) + pad2(now.getMinutes()) + pad2(now.getSeconds());
         }
-        return 'S' + stamp + random;
       }
 
       function buildCheckinUrl(session) {
@@ -1622,7 +1623,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
       }
 
       async function handleGenerate() {
-        var session = makeSessionId();
+        var session = await makeSessionId();
         var button = el.generateBtn;
         setButtonLoading(button, true, '生成中…');
 
