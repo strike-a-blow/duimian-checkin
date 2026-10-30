@@ -1,0 +1,1955 @@
+<!DOCTYPE html>
+<!--
+  对面合唱团 · 考勤签到（单文件版）
+  ============================================================
+  说明：当前网络无法直连 Supabase，因此本版本使用可在当前网络访问的
+  Npoint 公共 JSON 文档作为数据存储。页面本身部署在 GitHub Pages。
+
+  数据文档是公开可写的，请勿把管理员链接发给无关人员。
+  Supabase 版本已保留在 index-supabase.html 中，供网络可访问 Supabase 时使用。
+  ============================================================
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#111827">
+  <title>对面合唱团 · 签到管理</title>
+
+  <script>
+    // 团员扫码进入时，在页面渲染前先隐藏管理员视图，避免短暂闪现管理界面。
+    (function () {
+      if (/^#checkin(?:\?|$)/.test(window.location.hash || '')) {
+        document.documentElement.classList.add('route-checkin');
+      }
+    })();
+  </script>
+
+  <script>
+    // ============================================================
+    // 数据存储配置（Npoint 公共 JSON 文档）
+    // 该文档只用于本团的签到记录；文档 URL 即读写凭据，请勿公开分享。
+    // ============================================================
+    const NPOINT_DOC_URL = 'https://api.npoint.io/b045d129b9139897d215';
+  </script>
+
+  <style>
+    :root {
+      --bg: #f3f5f7;
+      --card: #ffffff;
+      --ink: #111827;
+      --ink-soft: #374151;
+      --muted: #6b7280;
+      --muted-light: #9ca3af;
+      --line: #e5e7eb;
+      --line-strong: #d1d5db;
+      --green: #15803d;
+      --green-bg: #f0fdf4;
+      --green-line: #bbf7d0;
+      --amber: #b45309;
+      --amber-bg: #fffbeb;
+      --amber-line: #fde68a;
+      --red: #b91c1c;
+      --red-bg: #fef2f2;
+      --red-line: #fecaca;
+      --blue: #1d4ed8;
+      --blue-bg: #eff6ff;
+      --radius-lg: 22px;
+      --radius-md: 15px;
+      --shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+      --shadow-soft: 0 8px 26px rgba(15, 23, 42, 0.055);
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+
+    /* 仅用于首屏路由判断，主脚本接管后会移除这个类。 */
+    html.route-checkin #adminView { display: none !important; }
+
+    html {
+      -webkit-text-size-adjust: 100%;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% -5%, rgba(17, 24, 39, 0.085), transparent 30rem),
+        radial-gradient(circle at 100% 2%, rgba(21, 128, 61, 0.08), transparent 27rem),
+        var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input, select { font: inherit; }
+    button, select { cursor: pointer; }
+    button:disabled { cursor: not-allowed; }
+    a { color: inherit; }
+
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    a:focus-visible {
+      outline: 3px solid rgba(17, 24, 39, 0.2);
+      outline-offset: 2px;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .admin-shell {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+      padding: clamp(22px, 4vw, 52px) clamp(16px, 4vw, 34px) 52px;
+    }
+
+    .admin-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 22px;
+      margin-bottom: 24px;
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 54px;
+      height: 54px;
+      flex: 0 0 auto;
+      border-radius: 17px;
+      color: #fff;
+      background: var(--ink);
+      font-size: 23px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      box-shadow: 0 10px 24px rgba(17, 24, 39, 0.2);
+    }
+
+    .eyebrow {
+      margin: 0 0 3px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .admin-header h1 {
+      margin: 0;
+      font-size: clamp(23px, 3.2vw, 32px);
+      line-height: 1.15;
+      letter-spacing: -0.025em;
+    }
+
+    .admin-subtitle {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .count-card {
+      min-width: 158px;
+      padding: 15px 20px 14px;
+      border-radius: 19px;
+      color: #fff;
+      background: var(--ink);
+      box-shadow: 0 15px 35px rgba(17, 24, 39, 0.2);
+    }
+
+    .count-label {
+      display: block;
+      color: #d1d5db;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+    }
+
+    .count-value {
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+      margin-top: 2px;
+    }
+
+    .count-value strong {
+      font-size: 38px;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .count-value span {
+      color: #d1d5db;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .config-warning {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 18px;
+      padding: 13px 16px;
+      border: 1px solid var(--amber-line);
+      border-radius: 14px;
+      color: #78350f;
+      background: var(--amber-bg);
+      font-size: 14px;
+    }
+
+    .config-warning code {
+      padding: 1px 5px;
+      border: 1px solid rgba(120, 53, 15, 0.18);
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.58);
+      font-size: 12px;
+    }
+
+    .card {
+      border: 1px solid rgba(229, 231, 235, 0.92);
+      border-radius: var(--radius-lg);
+      background: var(--card);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .session-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 18px 20px;
+      margin-bottom: 18px;
+    }
+
+    .session-info {
+      min-width: 0;
+    }
+
+    .session-label {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+
+    .session-value {
+      display: inline-block;
+      max-width: 100%;
+      overflow: hidden;
+      color: var(--ink);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 16px;
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      vertical-align: bottom;
+    }
+
+    .session-value.is-empty { color: var(--muted-light); font-weight: 500; }
+
+    .admin-actions {
+      display: flex;
+      flex: 0 0 auto;
+      gap: 9px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 43px;
+      padding: 9px 16px;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.2;
+      white-space: nowrap;
+      transition: transform 0.15s ease, background-color 0.15s ease,
+        border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+    }
+
+    .btn:not(:disabled):active { transform: translateY(1px); }
+
+    .btn-dark {
+      color: #fff;
+      background: var(--ink);
+      box-shadow: 0 8px 18px rgba(17, 24, 39, 0.16);
+    }
+
+    .btn-dark:not(:disabled):hover { background: #030712; }
+
+    .btn-ghost {
+      color: var(--ink-soft);
+      border-color: var(--line-strong);
+      background: #fff;
+    }
+
+    .btn-ghost:not(:disabled):hover {
+      border-color: #9ca3af;
+      background: #f9fafb;
+    }
+
+    .btn:disabled {
+      opacity: 0.48;
+      box-shadow: none;
+    }
+
+    .admin-grid {
+      display: grid;
+      grid-template-columns: minmax(300px, 0.82fr) minmax(420px, 1.55fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .qr-card {
+      padding: 22px;
+    }
+
+    .card-heading {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 15px;
+    }
+
+    .card-heading h2 {
+      margin: 0;
+      font-size: 19px;
+      line-height: 1.25;
+      letter-spacing: -0.02em;
+    }
+
+    .card-heading .eyebrow { margin-bottom: 2px; }
+
+    .qr-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 2px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      color: var(--green);
+      background: var(--green-bg);
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .qr-status::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .qr-status.is-idle {
+      color: var(--muted);
+      background: #f3f4f6;
+    }
+
+    .qr-box {
+      width: 256px;
+      height: 256px;
+      max-width: 100%;
+      margin: 0 auto;
+      padding: 17px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .qr-box img,
+    .qr-box canvas {
+      display: block;
+      width: 220px !important;
+      height: auto !important;
+      max-width: 100%;
+      aspect-ratio: 1 / 1;
+      image-rendering: pixelated;
+    }
+
+    .qr-placeholder {
+      display: grid;
+      place-items: center;
+      width: 100%;
+      height: 100%;
+      padding: 20px;
+      border: 1px dashed var(--line-strong);
+      border-radius: 11px;
+      color: var(--muted-light);
+      background: #fafafa;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .qr-placeholder strong {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .qr-error {
+      color: var(--red);
+      font-size: 13px;
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    .qr-tip {
+      margin: 14px auto 0;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .link-box {
+      margin-top: 15px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: #f8fafc;
+    }
+
+    .link-label {
+      display: block;
+      margin-bottom: 2px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+
+    .checkin-link {
+      display: block;
+      overflow: hidden;
+      color: var(--ink-soft);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      text-decoration: none;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .checkin-link:hover { color: var(--blue); text-decoration: underline; }
+
+    .session-inline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 12px;
+      padding-top: 13px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .session-inline code {
+      max-width: 72%;
+      overflow: hidden;
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .records-card { padding: 22px; }
+
+    .status {
+      margin: 0 0 13px;
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--muted);
+      background: #f9fafb;
+      font-size: 13px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+
+    .status.is-success {
+      color: var(--green);
+      border-color: var(--green-line);
+      background: var(--green-bg);
+    }
+
+    .status.is-error {
+      color: var(--red);
+      border-color: var(--red-line);
+      background: var(--red-bg);
+    }
+
+    .status.is-warning {
+      color: var(--amber);
+      border-color: var(--amber-line);
+      background: var(--amber-bg);
+    }
+
+    .table-wrap {
+      max-height: 438px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fff;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 12px 14px;
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      color: var(--muted);
+      background: #f9fafb;
+      border-bottom: 1px solid var(--line);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+    }
+
+    tbody tr { border-bottom: 1px solid #f1f3f5; }
+    tbody tr:last-child { border-bottom: 0; }
+    tbody tr:hover { background: #fafafa; }
+
+    td:first-child, th:first-child {
+      width: 64px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    td:nth-child(2) {
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    td:nth-child(3) {
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .empty-cell {
+      padding: 42px 18px !important;
+      color: var(--muted-light) !important;
+      text-align: center !important;
+      font-weight: 500 !important;
+      font-size: 14px;
+    }
+
+    .history-card {
+      margin-top: 18px;
+      padding: 22px;
+    }
+
+    .history-grid {
+      display: grid;
+      grid-template-columns: minmax(280px, 1.25fr) minmax(240px, 0.85fr);
+      gap: 15px;
+      align-items: end;
+    }
+
+    .field-label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .input, .select {
+      width: 100%;
+      min-height: 44px;
+      padding: 10px 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 11px;
+      color: var(--ink);
+      background: #fff;
+      font-size: 16px;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .input::placeholder { color: var(--muted-light); }
+
+    .input:focus, .select:focus {
+      border-color: #6b7280;
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.08);
+    }
+
+    .select {
+      appearance: none;
+      padding-right: 38px;
+      background-image:
+        linear-gradient(45deg, transparent 50%, #6b7280 50%),
+        linear-gradient(135deg, #6b7280 50%, transparent 50%);
+      background-position:
+        calc(100% - 18px) calc(50% - 2px),
+        calc(100% - 13px) calc(50% - 2px);
+      background-size: 5px 5px, 5px 5px;
+      background-repeat: no-repeat;
+      text-overflow: ellipsis;
+    }
+
+    .input-row .btn { flex: 0 0 auto; }
+
+    .history-hint {
+      margin: 10px 0 0;
+      color: var(--muted-light);
+      font-size: 12px;
+    }
+
+    .admin-footer {
+      margin-top: 24px;
+      color: var(--muted-light);
+      font-size: 12px;
+      text-align: center;
+      line-height: 1.7;
+    }
+
+    /* ---------- 团员签到视图 ---------- */
+
+    .checkin-page {
+      display: grid;
+      place-items: center;
+      min-height: 100vh;
+      min-height: 100svh;
+      padding: max(20px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+    }
+
+    .checkin-card {
+      position: relative;
+      width: min(100%, 440px);
+      padding: 30px clamp(20px, 6vw, 32px) 28px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .checkin-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto;
+      height: 5px;
+      background: linear-gradient(90deg, #111827 0%, #374151 55%, #15803d 100%);
+    }
+
+    .checkin-brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      margin-bottom: 23px;
+    }
+
+    .checkin-brand .brand-mark {
+      width: 46px;
+      height: 46px;
+      border-radius: 14px;
+      font-size: 20px;
+    }
+
+    .checkin-brand-text {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+    }
+
+    .checkin-card h1 {
+      margin: 0;
+      font-size: clamp(24px, 7vw, 30px);
+      line-height: 1.22;
+      letter-spacing: -0.03em;
+    }
+
+    .checkin-intro {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .checkin-session-box {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 21px 0 23px;
+      padding: 11px 13px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #f8fafc;
+    }
+
+    .checkin-session-box .session-label { margin: 0; }
+
+    .checkin-session-box code {
+      max-width: 68%;
+      overflow: hidden;
+      color: var(--ink-soft);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .checkin-form { display: grid; gap: 15px; }
+
+    .checkin-form .field-label {
+      margin-bottom: -8px;
+      font-size: 13px;
+    }
+
+    .name-input {
+      width: 100%;
+      min-height: 52px;
+      padding: 12px 15px;
+      border: 1px solid var(--line-strong);
+      border-radius: 13px;
+      color: var(--ink);
+      background: #fff;
+      font-size: 17px;
+      font-weight: 600;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .name-input::placeholder {
+      color: var(--muted-light);
+      font-weight: 400;
+    }
+
+    .name-input:focus {
+      border-color: #6b7280;
+      outline: none;
+      box-shadow: 0 0 0 4px rgba(17, 24, 39, 0.08);
+    }
+
+    .checkin-submit {
+      width: 100%;
+      min-height: 52px;
+      border-radius: 13px;
+      font-size: 16px;
+      letter-spacing: 0.04em;
+    }
+
+    .checkin-message {
+      margin: 0;
+      padding: 13px 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      color: var(--muted);
+      background: #f9fafb;
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+
+    .checkin-message:empty { display: none; }
+
+    .checkin-message.is-success {
+      color: var(--green);
+      border-color: var(--green-line);
+      background: var(--green-bg);
+    }
+
+    .checkin-message.is-warning {
+      color: var(--amber);
+      border-color: var(--amber-line);
+      background: var(--amber-bg);
+    }
+
+    .checkin-message.is-error {
+      color: var(--red);
+      border-color: var(--red-line);
+      background: var(--red-bg);
+    }
+
+    .checkin-footnote {
+      margin: 21px 0 0;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+      color: var(--muted-light);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    @media (max-width: 900px) {
+      .admin-grid { grid-template-columns: 1fr; }
+      .qr-card { display: grid; grid-template-columns: 1fr; }
+      .history-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      .admin-shell { padding-top: 20px; }
+      .admin-header {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 15px;
+        margin-bottom: 16px;
+      }
+      .admin-subtitle { margin-top: 4px; }
+      .count-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-width: 0;
+        padding: 12px 16px;
+      }
+      .count-value { margin-top: 0; }
+      .count-value strong { font-size: 30px; }
+      .session-bar {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 16px;
+        gap: 13px;
+      }
+      .admin-actions { justify-content: stretch; }
+      .admin-actions .btn { flex: 1 1 auto; }
+      .qr-card, .records-card, .history-card { padding: 17px; }
+      .card-heading { flex-direction: column; gap: 10px; }
+      .qr-box { width: min(256px, 100%); }
+      .input-row { flex-direction: column; }
+      .input-row .btn { width: 100%; }
+      .history-hint { line-height: 1.6; }
+      .checkin-page { padding-left: 14px; padding-right: 14px; }
+      .checkin-card { padding-top: 27px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    @media print {
+      @page { margin: 14mm; }
+      body { background: #fff; }
+      .admin-shell { width: 100%; max-width: none; padding: 0; }
+      .admin-header { margin-bottom: 18mm; }
+      .count-card { color: var(--ink); background: #fff; border: 1px solid var(--line); box-shadow: none; }
+      .count-label, .count-value span { color: var(--muted); }
+      .config-warning, .session-bar .admin-actions, .records-card, .history-card,
+      .admin-footer, .status, .link-box, .qr-tip, .qr-status { display: none !important; }
+      .admin-grid { display: block; }
+      .qr-card { width: 110mm; margin: 0 auto; padding: 0; border: 0; box-shadow: none; text-align: center; }
+      .qr-card .card-heading { justify-content: center; }
+      .qr-box { margin: 4mm auto 0; border: 0; }
+      .session-inline { justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+  <!-- ==================== 管理员视图 ==================== -->
+  <div id="adminView" class="view admin-shell">
+    <header class="admin-header">
+      <div>
+        <div class="brand-row">
+          <div class="brand-mark" aria-hidden="true">对</div>
+          <div>
+            <p class="eyebrow">ADMIN · 管理员</p>
+            <h1>对面合唱团 · 签到</h1>
+          </div>
+        </div>
+        <p class="admin-subtitle">生成签到码，团员扫码签到，记录自动汇总。</p>
+      </div>
+
+      <div class="count-card" aria-label="当前 session 签到人数">
+        <span class="count-label">当前签到人数</span>
+        <div class="count-value">
+          <strong id="adminCount">0</strong>
+          <span>人</span>
+        </div>
+      </div>
+    </header>
+
+    <div id="configWarning" class="config-warning" hidden>
+      <span aria-hidden="true">⚠</span>
+      <span>数据存储尚未配置。请检查 HTML 顶部的 <code>NPOINT_DOC_URL</code>，否则无法签到和读取记录。</span>
+    </div>
+
+    <section class="card session-bar" aria-label="当前 session 与操作">
+      <div class="session-info">
+        <span class="session-label">当前 SESSION</span>
+        <span id="adminSessionText" class="session-value is-empty">尚未生成</span>
+      </div>
+      <div class="admin-actions">
+        <button id="generateBtn" type="button" class="btn btn-dark">生成新签到码</button>
+        <button id="refreshBtn" type="button" class="btn btn-ghost" disabled>刷新记录</button>
+        <button id="exportBtn" type="button" class="btn btn-ghost" disabled>导出 CSV</button>
+      </div>
+    </section>
+
+    <main class="admin-grid">
+      <section class="card qr-card" aria-labelledby="qrTitle">
+        <div class="card-heading">
+          <div>
+            <p class="eyebrow">SCAN TO CHECK IN</p>
+            <h2 id="qrTitle">签到二维码</h2>
+          </div>
+          <span id="qrStatus" class="qr-status is-idle">等待生成</span>
+        </div>
+
+        <div id="qrBox" class="qr-box" role="img" aria-label="签到二维码">
+          <div class="qr-placeholder">
+            <span><strong>还没有二维码</strong>点击上方「生成新签到码」</span>
+          </div>
+        </div>
+
+        <p class="qr-tip">请团员用手机扫码，进入签到页面。</p>
+
+        <div id="linkBox" class="link-box" hidden>
+          <span class="link-label">签到链接</span>
+          <a id="checkinLink" class="checkin-link" href="#" target="_blank" rel="noopener noreferrer"></a>
+        </div>
+
+        <div class="session-inline">
+          <span>SESSION</span>
+          <code id="qrSessionText">—</code>
+        </div>
+      </section>
+
+      <section class="card records-card" aria-labelledby="recordsTitle">
+        <div class="card-heading">
+          <div>
+            <p class="eyebrow">LIVE LIST</p>
+            <h2 id="recordsTitle">签到记录</h2>
+          </div>
+        </div>
+
+        <p id="adminStatus" class="status" role="status" aria-live="polite" hidden></p>
+
+        <div class="table-wrap">
+          <table>
+            <caption class="sr-only">当前 session 的签到记录</caption>
+            <thead>
+              <tr>
+                <th scope="col">序号</th>
+                <th scope="col">姓名</th>
+                <th scope="col">签到时间</th>
+              </tr>
+            </thead>
+            <tbody id="recordsBody">
+              <tr>
+                <td colspan="3" class="empty-cell">生成签到码后，记录会显示在这里。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <section class="card history-card" aria-labelledby="historyTitle">
+      <div class="card-heading">
+        <div>
+          <p class="eyebrow">HISTORY</p>
+          <h2 id="historyTitle">查看历史</h2>
+        </div>
+      </div>
+
+      <div class="history-grid">
+        <div>
+          <label class="field-label" for="historyInput">手动输入 session</label>
+          <div class="input-row">
+            <input id="historyInput" class="input" type="text" maxlength="120"
+              placeholder="例如 S20261028090000A1B2C" autocomplete="off" spellcheck="false">
+            <button id="historyQueryBtn" type="button" class="btn btn-dark">查询</button>
+          </div>
+        </div>
+        <div>
+          <label class="field-label" for="historySelect">最近的 session</label>
+          <select id="historySelect" class="select" disabled>
+            <option value="">正在读取…</option>
+          </select>
+        </div>
+      </div>
+      <p id="historyHint" class="history-hint">历史 session 的记录不会被删除；选中后会加载到上方记录表中。</p>
+    </section>
+
+    <footer class="admin-footer">
+      管理员链接请勿公开分享 · 数据保存在云端 · 关闭电脑不影响签到
+    </footer>
+  </div>
+
+  <!-- ==================== 团员签到视图 ==================== -->
+  <div id="checkinView" class="view checkin-page" hidden>
+    <main class="card checkin-card" aria-labelledby="checkinTitle">
+      <div class="checkin-brand">
+        <div class="brand-mark" aria-hidden="true">对</div>
+        <span class="checkin-brand-text">DUIMIAN CHOIR</span>
+      </div>
+
+      <h1 id="checkinTitle">对面合唱团 · 签到</h1>
+      <p class="checkin-intro">填写真实姓名，完成本次排练签到。</p>
+
+      <div class="checkin-session-box">
+        <span class="session-label">当前 SESSION</span>
+        <code id="checkinSessionText">—</code>
+      </div>
+
+      <form id="checkinForm" class="checkin-form" novalidate>
+        <label class="field-label" for="memberName">你的姓名</label>
+        <input id="memberName" class="name-input" type="text" name="name"
+          maxlength="30" placeholder="请输入姓名" autocomplete="name" enterkeyhint="done" required>
+        <button id="checkinBtn" type="submit" class="btn btn-dark checkin-submit">签到</button>
+      </form>
+
+      <p id="checkinMessage" class="checkin-message" role="status" aria-live="polite"></p>
+
+      <p class="checkin-footnote">提交即表示你已到场。如姓名填错，请联系管理员。</p>
+    </main>
+  </div>
+
+  <!-- qrcodejs 1.0.0（MIT，davidshimjs）内联，避免 CDN 在当前网络不可达。 -->
+  <script>
+    /*!
+     * qrcodejs 1.0.0 | Copyright (c) 2012 davidshimjs | MIT License
+     * https://github.com/davidshimjs/qrcodejs
+     */
+var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this.parsedData=[];for(var b=[],d=0,e=this.data.length;e>d;d++){var f=this.data.charCodeAt(d);f>65536?(b[0]=240|(1835008&f)>>>18,b[1]=128|(258048&f)>>>12,b[2]=128|(4032&f)>>>6,b[3]=128|63&f):f>2048?(b[0]=224|(61440&f)>>>12,b[1]=128|(4032&f)>>>6,b[2]=128|63&f):f>128?(b[0]=192|(1984&f)>>>6,b[1]=128|63&f):b[0]=f,this.parsedData=this.parsedData.concat(b)}this.parsedData.length!=this.data.length&&(this.parsedData.unshift(191),this.parsedData.unshift(187),this.parsedData.unshift(239))}function b(a,b){this.typeNumber=a,this.errorCorrectLevel=b,this.modules=null,this.moduleCount=0,this.dataCache=null,this.dataList=[]}function i(a,b){if(void 0==a.length)throw new Error(a.length+"/"+b);for(var c=0;c<a.length&&0==a[c];)c++;this.num=new Array(a.length-c+b);for(var d=0;d<a.length-c;d++)this.num[d]=a[d+c]}function j(a,b){this.totalCount=a,this.dataCount=b}function k(){this.buffer=[],this.length=0}function m(){return"undefined"!=typeof CanvasRenderingContext2D}function n(){var a=!1,b=navigator.userAgent;return/android/i.test(b)&&(a=!0,aMat=b.toString().match(/android ([0-9]\.[0-9])/i),aMat&&aMat[1]&&(a=parseFloat(aMat[1]))),a}function r(a,b){for(var c=1,e=s(a),f=0,g=l.length;g>=f;f++){var h=0;switch(b){case d.L:h=l[f][0];break;case d.M:h=l[f][1];break;case d.Q:h=l[f][2];break;case d.H:h=l[f][3]}if(h>=e)break;c++}if(c>l.length)throw new Error("Too long data");return c}function s(a){var b=encodeURI(a).toString().replace(/\%[0-9a-fA-F]{2}/g,"a");return b.length+(b.length!=a?3:0)}a.prototype={getLength:function(){return this.parsedData.length},write:function(a){for(var b=0,c=this.parsedData.length;c>b;b++)a.put(this.parsedData[b],8)}},b.prototype={addData:function(b){var c=new a(b);this.dataList.push(c),this.dataCache=null},isDark:function(a,b){if(0>a||this.moduleCount<=a||0>b||this.moduleCount<=b)throw new Error(a+","+b);return this.modules[a][b]},getModuleCount:function(){return this.moduleCount},make:function(){this.makeImpl(!1,this.getBestMaskPattern())},makeImpl:function(a,c){this.moduleCount=4*this.typeNumber+17,this.modules=new Array(this.moduleCount);for(var d=0;d<this.moduleCount;d++){this.modules[d]=new Array(this.moduleCount);for(var e=0;e<this.moduleCount;e++)this.modules[d][e]=null}this.setupPositionProbePattern(0,0),this.setupPositionProbePattern(this.moduleCount-7,0),this.setupPositionProbePattern(0,this.moduleCount-7),this.setupPositionAdjustPattern(),this.setupTimingPattern(),this.setupTypeInfo(a,c),this.typeNumber>=7&&this.setupTypeNumber(a),null==this.dataCache&&(this.dataCache=b.createData(this.typeNumber,this.errorCorrectLevel,this.dataList)),this.mapData(this.dataCache,c)},setupPositionProbePattern:function(a,b){for(var c=-1;7>=c;c++)if(!(-1>=a+c||this.moduleCount<=a+c))for(var d=-1;7>=d;d++)-1>=b+d||this.moduleCount<=b+d||(this.modules[a+c][b+d]=c>=0&&6>=c&&(0==d||6==d)||d>=0&&6>=d&&(0==c||6==c)||c>=2&&4>=c&&d>=2&&4>=d?!0:!1)},getBestMaskPattern:function(){for(var a=0,b=0,c=0;8>c;c++){this.makeImpl(!0,c);var d=f.getLostPoint(this);(0==c||a>d)&&(a=d,b=c)}return b},createMovieClip:function(a,b,c){var d=a.createEmptyMovieClip(b,c),e=1;this.make();for(var f=0;f<this.modules.length;f++)for(var g=f*e,h=0;h<this.modules[f].length;h++){var i=h*e,j=this.modules[f][h];j&&(d.beginFill(0,100),d.moveTo(i,g),d.lineTo(i+e,g),d.lineTo(i+e,g+e),d.lineTo(i,g+e),d.endFill())}return d},setupTimingPattern:function(){for(var a=8;a<this.moduleCount-8;a++)null==this.modules[a][6]&&(this.modules[a][6]=0==a%2);for(var b=8;b<this.moduleCount-8;b++)null==this.modules[6][b]&&(this.modules[6][b]=0==b%2)},setupPositionAdjustPattern:function(){for(var a=f.getPatternPosition(this.typeNumber),b=0;b<a.length;b++)for(var c=0;c<a.length;c++){var d=a[b],e=a[c];if(null==this.modules[d][e])for(var g=-2;2>=g;g++)for(var h=-2;2>=h;h++)this.modules[d+g][e+h]=-2==g||2==g||-2==h||2==h||0==g&&0==h?!0:!1}},setupTypeNumber:function(a){for(var b=f.getBCHTypeNumber(this.typeNumber),c=0;18>c;c++){var d=!a&&1==(1&b>>c);this.modules[Math.floor(c/3)][c%3+this.moduleCount-8-3]=d}for(var c=0;18>c;c++){var d=!a&&1==(1&b>>c);this.modules[c%3+this.moduleCount-8-3][Math.floor(c/3)]=d}},setupTypeInfo:function(a,b){for(var c=this.errorCorrectLevel<<3|b,d=f.getBCHTypeInfo(c),e=0;15>e;e++){var g=!a&&1==(1&d>>e);6>e?this.modules[e][8]=g:8>e?this.modules[e+1][8]=g:this.modules[this.moduleCount-15+e][8]=g}for(var e=0;15>e;e++){var g=!a&&1==(1&d>>e);8>e?this.modules[8][this.moduleCount-e-1]=g:9>e?this.modules[8][15-e-1+1]=g:this.modules[8][15-e-1]=g}this.modules[this.moduleCount-8][8]=!a},mapData:function(a,b){for(var c=-1,d=this.moduleCount-1,e=7,g=0,h=this.moduleCount-1;h>0;h-=2)for(6==h&&h--;;){for(var i=0;2>i;i++)if(null==this.modules[d][h-i]){var j=!1;g<a.length&&(j=1==(1&a[g]>>>e));var k=f.getMask(b,d,h-i);k&&(j=!j),this.modules[d][h-i]=j,e--,-1==e&&(g++,e=7)}if(d+=c,0>d||this.moduleCount<=d){d-=c,c=-c;break}}}},b.PAD0=236,b.PAD1=17,b.createData=function(a,c,d){for(var e=j.getRSBlocks(a,c),g=new k,h=0;h<d.length;h++){var i=d[h];g.put(i.mode,4),g.put(i.getLength(),f.getLengthInBits(i.mode,a)),i.write(g)}for(var l=0,h=0;h<e.length;h++)l+=e[h].dataCount;if(g.getLengthInBits()>8*l)throw new Error("code length overflow. ("+g.getLengthInBits()+">"+8*l+")");for(g.getLengthInBits()+4<=8*l&&g.put(0,4);0!=g.getLengthInBits()%8;)g.putBit(!1);for(;;){if(g.getLengthInBits()>=8*l)break;if(g.put(b.PAD0,8),g.getLengthInBits()>=8*l)break;g.put(b.PAD1,8)}return b.createBytes(g,e)},b.createBytes=function(a,b){for(var c=0,d=0,e=0,g=new Array(b.length),h=new Array(b.length),j=0;j<b.length;j++){var k=b[j].dataCount,l=b[j].totalCount-k;d=Math.max(d,k),e=Math.max(e,l),g[j]=new Array(k);for(var m=0;m<g[j].length;m++)g[j][m]=255&a.buffer[m+c];c+=k;var n=f.getErrorCorrectPolynomial(l),o=new i(g[j],n.getLength()-1),p=o.mod(n);h[j]=new Array(n.getLength()-1);for(var m=0;m<h[j].length;m++){var q=m+p.getLength()-h[j].length;h[j][m]=q>=0?p.get(q):0}}for(var r=0,m=0;m<b.length;m++)r+=b[m].totalCount;for(var s=new Array(r),t=0,m=0;d>m;m++)for(var j=0;j<b.length;j++)m<g[j].length&&(s[t++]=g[j][m]);for(var m=0;e>m;m++)for(var j=0;j<b.length;j++)m<h[j].length&&(s[t++]=h[j][m]);return s};for(var c={MODE_NUMBER:1,MODE_ALPHA_NUM:2,MODE_8BIT_BYTE:4,MODE_KANJI:8},d={L:1,M:0,Q:3,H:2},e={PATTERN000:0,PATTERN001:1,PATTERN010:2,PATTERN011:3,PATTERN100:4,PATTERN101:5,PATTERN110:6,PATTERN111:7},f={PATTERN_POSITION_TABLE:[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]],G15:1335,G18:7973,G15_MASK:21522,getBCHTypeInfo:function(a){for(var b=a<<10;f.getBCHDigit(b)-f.getBCHDigit(f.G15)>=0;)b^=f.G15<<f.getBCHDigit(b)-f.getBCHDigit(f.G15);return(a<<10|b)^f.G15_MASK},getBCHTypeNumber:function(a){for(var b=a<<12;f.getBCHDigit(b)-f.getBCHDigit(f.G18)>=0;)b^=f.G18<<f.getBCHDigit(b)-f.getBCHDigit(f.G18);return a<<12|b},getBCHDigit:function(a){for(var b=0;0!=a;)b++,a>>>=1;return b},getPatternPosition:function(a){return f.PATTERN_POSITION_TABLE[a-1]},getMask:function(a,b,c){switch(a){case e.PATTERN000:return 0==(b+c)%2;case e.PATTERN001:return 0==b%2;case e.PATTERN010:return 0==c%3;case e.PATTERN011:return 0==(b+c)%3;case e.PATTERN100:return 0==(Math.floor(b/2)+Math.floor(c/3))%2;case e.PATTERN101:return 0==b*c%2+b*c%3;case e.PATTERN110:return 0==(b*c%2+b*c%3)%2;case e.PATTERN111:return 0==(b*c%3+(b+c)%2)%2;default:throw new Error("bad maskPattern:"+a)}},getErrorCorrectPolynomial:function(a){for(var b=new i([1],0),c=0;a>c;c++)b=b.multiply(new i([1,g.gexp(c)],0));return b},getLengthInBits:function(a,b){if(b>=1&&10>b)switch(a){case c.MODE_NUMBER:return 10;case c.MODE_ALPHA_NUM:return 9;case c.MODE_8BIT_BYTE:return 8;case c.MODE_KANJI:return 8;default:throw new Error("mode:"+a)}else if(27>b)switch(a){case c.MODE_NUMBER:return 12;case c.MODE_ALPHA_NUM:return 11;case c.MODE_8BIT_BYTE:return 16;case c.MODE_KANJI:return 10;default:throw new Error("mode:"+a)}else{if(!(41>b))throw new Error("type:"+b);switch(a){case c.MODE_NUMBER:return 14;case c.MODE_ALPHA_NUM:return 13;case c.MODE_8BIT_BYTE:return 16;case c.MODE_KANJI:return 12;default:throw new Error("mode:"+a)}}},getLostPoint:function(a){for(var b=a.getModuleCount(),c=0,d=0;b>d;d++)for(var e=0;b>e;e++){for(var f=0,g=a.isDark(d,e),h=-1;1>=h;h++)if(!(0>d+h||d+h>=b))for(var i=-1;1>=i;i++)0>e+i||e+i>=b||(0!=h||0!=i)&&g==a.isDark(d+h,e+i)&&f++;f>5&&(c+=3+f-5)}for(var d=0;b-1>d;d++)for(var e=0;b-1>e;e++){var j=0;a.isDark(d,e)&&j++,a.isDark(d+1,e)&&j++,a.isDark(d,e+1)&&j++,a.isDark(d+1,e+1)&&j++,(0==j||4==j)&&(c+=3)}for(var d=0;b>d;d++)for(var e=0;b-6>e;e++)a.isDark(d,e)&&!a.isDark(d,e+1)&&a.isDark(d,e+2)&&a.isDark(d,e+3)&&a.isDark(d,e+4)&&!a.isDark(d,e+5)&&a.isDark(d,e+6)&&(c+=40);for(var e=0;b>e;e++)for(var d=0;b-6>d;d++)a.isDark(d,e)&&!a.isDark(d+1,e)&&a.isDark(d+2,e)&&a.isDark(d+3,e)&&a.isDark(d+4,e)&&!a.isDark(d+5,e)&&a.isDark(d+6,e)&&(c+=40);for(var k=0,e=0;b>e;e++)for(var d=0;b>d;d++)a.isDark(d,e)&&k++;var l=Math.abs(100*k/b/b-50)/5;return c+=10*l}},g={glog:function(a){if(1>a)throw new Error("glog("+a+")");return g.LOG_TABLE[a]},gexp:function(a){for(;0>a;)a+=255;for(;a>=256;)a-=255;return g.EXP_TABLE[a]},EXP_TABLE:new Array(256),LOG_TABLE:new Array(256)},h=0;8>h;h++)g.EXP_TABLE[h]=1<<h;for(var h=8;256>h;h++)g.EXP_TABLE[h]=g.EXP_TABLE[h-4]^g.EXP_TABLE[h-5]^g.EXP_TABLE[h-6]^g.EXP_TABLE[h-8];for(var h=0;255>h;h++)g.LOG_TABLE[g.EXP_TABLE[h]]=h;i.prototype={get:function(a){return this.num[a]},getLength:function(){return this.num.length},multiply:function(a){for(var b=new Array(this.getLength()+a.getLength()-1),c=0;c<this.getLength();c++)for(var d=0;d<a.getLength();d++)b[c+d]^=g.gexp(g.glog(this.get(c))+g.glog(a.get(d)));return new i(b,0)},mod:function(a){if(this.getLength()-a.getLength()<0)return this;for(var b=g.glog(this.get(0))-g.glog(a.get(0)),c=new Array(this.getLength()),d=0;d<this.getLength();d++)c[d]=this.get(d);for(var d=0;d<a.getLength();d++)c[d]^=g.gexp(g.glog(a.get(d))+b);return new i(c,0).mod(a)}},j.RS_BLOCK_TABLE=[[1,26,19],[1,26,16],[1,26,13],[1,26,9],[1,44,34],[1,44,28],[1,44,22],[1,44,16],[1,70,55],[1,70,44],[2,35,17],[2,35,13],[1,100,80],[2,50,32],[2,50,24],[4,25,9],[1,134,108],[2,67,43],[2,33,15,2,34,16],[2,33,11,2,34,12],[2,86,68],[4,43,27],[4,43,19],[4,43,15],[2,98,78],[4,49,31],[2,32,14,4,33,15],[4,39,13,1,40,14],[2,121,97],[2,60,38,2,61,39],[4,40,18,2,41,19],[4,40,14,2,41,15],[2,146,116],[3,58,36,2,59,37],[4,36,16,4,37,17],[4,36,12,4,37,13],[2,86,68,2,87,69],[4,69,43,1,70,44],[6,43,19,2,44,20],[6,43,15,2,44,16],[4,101,81],[1,80,50,4,81,51],[4,50,22,4,51,23],[3,36,12,8,37,13],[2,116,92,2,117,93],[6,58,36,2,59,37],[4,46,20,6,47,21],[7,42,14,4,43,15],[4,133,107],[8,59,37,1,60,38],[8,44,20,4,45,21],[12,33,11,4,34,12],[3,145,115,1,146,116],[4,64,40,5,65,41],[11,36,16,5,37,17],[11,36,12,5,37,13],[5,109,87,1,110,88],[5,65,41,5,66,42],[5,54,24,7,55,25],[11,36,12],[5,122,98,1,123,99],[7,73,45,3,74,46],[15,43,19,2,44,20],[3,45,15,13,46,16],[1,135,107,5,136,108],[10,74,46,1,75,47],[1,50,22,15,51,23],[2,42,14,17,43,15],[5,150,120,1,151,121],[9,69,43,4,70,44],[17,50,22,1,51,23],[2,42,14,19,43,15],[3,141,113,4,142,114],[3,70,44,11,71,45],[17,47,21,4,48,22],[9,39,13,16,40,14],[3,135,107,5,136,108],[3,67,41,13,68,42],[15,54,24,5,55,25],[15,43,15,10,44,16],[4,144,116,4,145,117],[17,68,42],[17,50,22,6,51,23],[19,46,16,6,47,17],[2,139,111,7,140,112],[17,74,46],[7,54,24,16,55,25],[34,37,13],[4,151,121,5,152,122],[4,75,47,14,76,48],[11,54,24,14,55,25],[16,45,15,14,46,16],[6,147,117,4,148,118],[6,73,45,14,74,46],[11,54,24,16,55,25],[30,46,16,2,47,17],[8,132,106,4,133,107],[8,75,47,13,76,48],[7,54,24,22,55,25],[22,45,15,13,46,16],[10,142,114,2,143,115],[19,74,46,4,75,47],[28,50,22,6,51,23],[33,46,16,4,47,17],[8,152,122,4,153,123],[22,73,45,3,74,46],[8,53,23,26,54,24],[12,45,15,28,46,16],[3,147,117,10,148,118],[3,73,45,23,74,46],[4,54,24,31,55,25],[11,45,15,31,46,16],[7,146,116,7,147,117],[21,73,45,7,74,46],[1,53,23,37,54,24],[19,45,15,26,46,16],[5,145,115,10,146,116],[19,75,47,10,76,48],[15,54,24,25,55,25],[23,45,15,25,46,16],[13,145,115,3,146,116],[2,74,46,29,75,47],[42,54,24,1,55,25],[23,45,15,28,46,16],[17,145,115],[10,74,46,23,75,47],[10,54,24,35,55,25],[19,45,15,35,46,16],[17,145,115,1,146,116],[14,74,46,21,75,47],[29,54,24,19,55,25],[11,45,15,46,46,16],[13,145,115,6,146,116],[14,74,46,23,75,47],[44,54,24,7,55,25],[59,46,16,1,47,17],[12,151,121,7,152,122],[12,75,47,26,76,48],[39,54,24,14,55,25],[22,45,15,41,46,16],[6,151,121,14,152,122],[6,75,47,34,76,48],[46,54,24,10,55,25],[2,45,15,64,46,16],[17,152,122,4,153,123],[29,74,46,14,75,47],[49,54,24,10,55,25],[24,45,15,46,46,16],[4,152,122,18,153,123],[13,74,46,32,75,47],[48,54,24,14,55,25],[42,45,15,32,46,16],[20,147,117,4,148,118],[40,75,47,7,76,48],[43,54,24,22,55,25],[10,45,15,67,46,16],[19,148,118,6,149,119],[18,75,47,31,76,48],[34,54,24,34,55,25],[20,45,15,61,46,16]],j.getRSBlocks=function(a,b){var c=j.getRsBlockTable(a,b);if(void 0==c)throw new Error("bad rs block @ typeNumber:"+a+"/errorCorrectLevel:"+b);for(var d=c.length/3,e=[],f=0;d>f;f++)for(var g=c[3*f+0],h=c[3*f+1],i=c[3*f+2],k=0;g>k;k++)e.push(new j(h,i));return e},j.getRsBlockTable=function(a,b){switch(b){case d.L:return j.RS_BLOCK_TABLE[4*(a-1)+0];case d.M:return j.RS_BLOCK_TABLE[4*(a-1)+1];case d.Q:return j.RS_BLOCK_TABLE[4*(a-1)+2];case d.H:return j.RS_BLOCK_TABLE[4*(a-1)+3];default:return void 0}},k.prototype={get:function(a){var b=Math.floor(a/8);return 1==(1&this.buffer[b]>>>7-a%8)},put:function(a,b){for(var c=0;b>c;c++)this.putBit(1==(1&a>>>b-c-1))},getLengthInBits:function(){return this.length},putBit:function(a){var b=Math.floor(this.length/8);this.buffer.length<=b&&this.buffer.push(0),a&&(this.buffer[b]|=128>>>this.length%8),this.length++}};var l=[[17,14,11,7],[32,26,20,14],[53,42,32,24],[78,62,46,34],[106,84,60,44],[134,106,74,58],[154,122,86,64],[192,152,108,84],[230,180,130,98],[271,213,151,119],[321,251,177,137],[367,287,203,155],[425,331,241,177],[458,362,258,194],[520,412,292,220],[586,450,322,250],[644,504,364,280],[718,560,394,310],[792,624,442,338],[858,666,482,382],[929,711,509,403],[1003,779,565,439],[1091,857,611,461],[1171,911,661,511],[1273,997,715,535],[1367,1059,751,593],[1465,1125,805,625],[1528,1190,868,658],[1628,1264,908,698],[1732,1370,982,742],[1840,1452,1030,790],[1952,1538,1112,842],[2068,1628,1168,898],[2188,1722,1228,958],[2303,1809,1283,983],[2431,1911,1351,1051],[2563,1989,1423,1093],[2699,2099,1499,1139],[2809,2213,1579,1219],[2953,2331,1663,1273]],o=function(){var a=function(a,b){this._el=a,this._htOption=b};return a.prototype.draw=function(a){function g(a,b){var c=document.createElementNS("http://www.w3.org/2000/svg",a);for(var d in b)b.hasOwnProperty(d)&&c.setAttribute(d,b[d]);return c}var b=this._htOption,c=this._el,d=a.getModuleCount();Math.floor(b.width/d),Math.floor(b.height/d),this.clear();var h=g("svg",{viewBox:"0 0 "+String(d)+" "+String(d),width:"100%",height:"100%",fill:b.colorLight});h.setAttributeNS("http://www.w3.org/2000/xmlns/","xmlns:xlink","http://www.w3.org/1999/xlink"),c.appendChild(h),h.appendChild(g("rect",{fill:b.colorDark,width:"1",height:"1",id:"template"}));for(var i=0;d>i;i++)for(var j=0;d>j;j++)if(a.isDark(i,j)){var k=g("use",{x:String(i),y:String(j)});k.setAttributeNS("http://www.w3.org/1999/xlink","href","#template"),h.appendChild(k)}},a.prototype.clear=function(){for(;this._el.hasChildNodes();)this._el.removeChild(this._el.lastChild)},a}(),p="svg"===document.documentElement.tagName.toLowerCase(),q=p?o:m()?function(){function a(){this._elImage.src=this._elCanvas.toDataURL("image/png"),this._elImage.style.display="block",this._elCanvas.style.display="none"}function d(a,b){var c=this;if(c._fFail=b,c._fSuccess=a,null===c._bSupportDataURI){var d=document.createElement("img"),e=function(){c._bSupportDataURI=!1,c._fFail&&_fFail.call(c)},f=function(){c._bSupportDataURI=!0,c._fSuccess&&c._fSuccess.call(c)};return d.onabort=e,d.onerror=e,d.onload=f,d.src="data:image/gif;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==",void 0}c._bSupportDataURI===!0&&c._fSuccess?c._fSuccess.call(c):c._bSupportDataURI===!1&&c._fFail&&c._fFail.call(c)}if(this._android&&this._android<=2.1){var b=1/window.devicePixelRatio,c=CanvasRenderingContext2D.prototype.drawImage;CanvasRenderingContext2D.prototype.drawImage=function(a,d,e,f,g,h,i,j){if("nodeName"in a&&/img/i.test(a.nodeName))for(var l=arguments.length-1;l>=1;l--)arguments[l]=arguments[l]*b;else"undefined"==typeof j&&(arguments[1]*=b,arguments[2]*=b,arguments[3]*=b,arguments[4]*=b);c.apply(this,arguments)}}var e=function(a,b){this._bIsPainted=!1,this._android=n(),this._htOption=b,this._elCanvas=document.createElement("canvas"),this._elCanvas.width=b.width,this._elCanvas.height=b.height,a.appendChild(this._elCanvas),this._el=a,this._oContext=this._elCanvas.getContext("2d"),this._bIsPainted=!1,this._elImage=document.createElement("img"),this._elImage.style.display="none",this._el.appendChild(this._elImage),this._bSupportDataURI=null};return e.prototype.draw=function(a){var b=this._elImage,c=this._oContext,d=this._htOption,e=a.getModuleCount(),f=d.width/e,g=d.height/e,h=Math.round(f),i=Math.round(g);b.style.display="none",this.clear();for(var j=0;e>j;j++)for(var k=0;e>k;k++){var l=a.isDark(j,k),m=k*f,n=j*g;c.strokeStyle=l?d.colorDark:d.colorLight,c.lineWidth=1,c.fillStyle=l?d.colorDark:d.colorLight,c.fillRect(m,n,f,g),c.strokeRect(Math.floor(m)+.5,Math.floor(n)+.5,h,i),c.strokeRect(Math.ceil(m)-.5,Math.ceil(n)-.5,h,i)}this._bIsPainted=!0},e.prototype.makeImage=function(){this._bIsPainted&&d.call(this,a)},e.prototype.isPainted=function(){return this._bIsPainted},e.prototype.clear=function(){this._oContext.clearRect(0,0,this._elCanvas.width,this._elCanvas.height),this._bIsPainted=!1},e.prototype.round=function(a){return a?Math.floor(1e3*a)/1e3:a},e}():function(){var a=function(a,b){this._el=a,this._htOption=b};return a.prototype.draw=function(a){for(var b=this._htOption,c=this._el,d=a.getModuleCount(),e=Math.floor(b.width/d),f=Math.floor(b.height/d),g=['<table style="border:0;border-collapse:collapse;">'],h=0;d>h;h++){g.push("<tr>");for(var i=0;d>i;i++)g.push('<td style="border:0;border-collapse:collapse;padding:0;margin:0;width:'+e+"px;height:"+f+"px;background-color:"+(a.isDark(h,i)?b.colorDark:b.colorLight)+';"></td>');g.push("</tr>")}g.push("</table>"),c.innerHTML=g.join("");var j=c.childNodes[0],k=(b.width-j.offsetWidth)/2,l=(b.height-j.offsetHeight)/2;k>0&&l>0&&(j.style.margin=l+"px "+k+"px")},a.prototype.clear=function(){this._el.innerHTML=""},a}();QRCode=function(a,b){if(this._htOption={width:256,height:256,typeNumber:4,colorDark:"#000000",colorLight:"#ffffff",correctLevel:d.H},"string"==typeof b&&(b={text:b}),b)for(var c in b)this._htOption[c]=b[c];"string"==typeof a&&(a=document.getElementById(a)),this._android=n(),this._el=a,this._oQRCode=null,this._oDrawing=new q(this._el,this._htOption),this._htOption.text&&this.makeCode(this._htOption.text)},QRCode.prototype.makeCode=function(a){this._oQRCode=new b(r(a,this._htOption.correctLevel),this._htOption.correctLevel),this._oQRCode.addData(a),this._oQRCode.make(),this._el.title=a,this._oDrawing.draw(this._oQRCode),this.makeImage()},QRCode.prototype.makeImage=function(){"function"==typeof this._oDrawing.makeImage&&(!this._android||this._android>=3)&&this._oDrawing.makeImage()},QRCode.prototype.clear=function(){this._oDrawing.clear()},QRCode.CorrectLevel=d}();
+  </script>
+
+  <script>
+    (function () {
+      'use strict';
+
+      /* ======================== 状态与工具 ======================== */
+
+      var STORAGE_KEY = 'duimian-choir-current-session';
+      var APP_ID = 'duimian-choir-checkin';
+      var STORE_URL = String(NPOINT_DOC_URL || '').trim();
+      var CONFIGURED = Boolean(STORE_URL) && STORE_URL.indexOf('YOUR-') === -1;
+
+      var state = {
+        adminBooted: false,
+        currentSession: '',
+        records: [],
+        recordsSeq: 0,
+        checkinSession: '',
+        checkinBusy: false,
+        recentSeq: 0
+      };
+
+      function $(id) { return document.getElementById(id); }
+
+      var el = {
+        adminView: $('adminView'),
+        checkinView: $('checkinView'),
+        configWarning: $('configWarning'),
+        adminCount: $('adminCount'),
+        adminSessionText: $('adminSessionText'),
+        generateBtn: $('generateBtn'),
+        refreshBtn: $('refreshBtn'),
+        exportBtn: $('exportBtn'),
+        adminStatus: $('adminStatus'),
+        qrBox: $('qrBox'),
+        qrStatus: $('qrStatus'),
+        linkBox: $('linkBox'),
+        checkinLink: $('checkinLink'),
+        qrSessionText: $('qrSessionText'),
+        recordsBody: $('recordsBody'),
+        historyInput: $('historyInput'),
+        historyQueryBtn: $('historyQueryBtn'),
+        historySelect: $('historySelect'),
+        historyHint: $('historyHint'),
+        checkinForm: $('checkinForm'),
+        memberName: $('memberName'),
+        checkinBtn: $('checkinBtn'),
+        checkinSessionText: $('checkinSessionText'),
+        checkinMessage: $('checkinMessage')
+      };
+
+      function pad2(value) { return String(value).padStart(2, '0'); }
+
+      function formatTime(value) {
+        var date = value ? new Date(value) : new Date();
+        if (isNaN(date.getTime())) { return String(value || '—'); }
+        return date.getFullYear() + '-' + pad2(date.getMonth() + 1) + '-' + pad2(date.getDate()) +
+          ' ' + pad2(date.getHours()) + ':' + pad2(date.getMinutes()) + ':' + pad2(date.getSeconds());
+      }
+
+      function makeSessionId() {
+        var now = new Date();
+        var stamp = String(now.getFullYear()) + pad2(now.getMonth() + 1) + pad2(now.getDate()) +
+          pad2(now.getHours()) + pad2(now.getMinutes()) + pad2(now.getSeconds());
+        var random = '';
+        if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+          var bytes = new Uint8Array(4);
+          window.crypto.getRandomValues(bytes);
+          for (var i = 0; i < bytes.length; i += 1) {
+            random += bytes[i].toString(36).padStart(2, '0');
+          }
+          random = random.slice(0, 6).toUpperCase();
+        } else {
+          random = Math.random().toString(36).slice(2, 8).toUpperCase();
+        }
+        return 'S' + stamp + random;
+      }
+
+      function buildCheckinUrl(session) {
+        var base = window.location.href.split('#')[0];
+        return base + '#checkin?session=' + encodeURIComponent(session);
+      }
+
+      function safeStorageGet(key) {
+        try { return window.localStorage.getItem(key) || ''; }
+        catch (error) { return ''; }
+      }
+
+      function safeStorageSet(key, value) {
+        try { window.localStorage.setItem(key, value); }
+        catch (error) { /* 隐私模式下忽略即可 */ }
+      }
+
+      function setStatus(target, message, type) {
+        target.textContent = message || '';
+        target.hidden = !message;
+        target.className = 'status' + (type ? ' is-' + type : '');
+      }
+
+      function setCheckinMessage(message, type) {
+        el.checkinMessage.textContent = message || '';
+        el.checkinMessage.className = 'checkin-message' + (type ? ' is-' + type : '');
+      }
+
+      function setButtonLoading(button, loading, loadingText) {
+        if (!button) { return; }
+        if (loading) {
+          button.dataset.originalText = button.textContent;
+          button.textContent = loadingText || '处理中…';
+          button.disabled = true;
+        } else {
+          if (Object.prototype.hasOwnProperty.call(button.dataset, 'originalText')) {
+            button.textContent = button.dataset.originalText;
+            delete button.dataset.originalText;
+          }
+          button.disabled = false;
+        }
+      }
+
+      /* ======================== 云端 JSON 存储（Npoint） ======================== */
+
+      function sleep(ms) {
+        return new Promise(function (resolve) { window.setTimeout(resolve, ms); });
+      }
+
+      function storeRequestUrl() {
+        var separator = STORE_URL.indexOf('?') === -1 ? '?' : '&';
+        return STORE_URL + separator + 't=' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      }
+
+      async function storeFetch(options) {
+        var request = options || {};
+        var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        var timer = null;
+        if (controller) {
+          request.signal = controller.signal;
+          timer = window.setTimeout(function () { controller.abort(); }, 12000);
+        }
+        try {
+          return await fetch(storeRequestUrl(), request);
+        } catch (error) {
+          if (error && error.name === 'AbortError') {
+            throw new Error('云端连接超时，请稍后重试。');
+          }
+          throw new Error('云端连接失败，请检查网络后重试。');
+        } finally {
+          if (timer) { window.clearTimeout(timer); }
+        }
+      }
+
+      function normalizeStore(raw) {
+        var doc = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+        if (!doc.sessions || typeof doc.sessions !== 'object' || Array.isArray(doc.sessions)) {
+          doc.sessions = {};
+        }
+        Object.keys(doc.sessions).forEach(function (session) {
+          var entry = doc.sessions[session];
+          if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+            entry = {};
+            doc.sessions[session] = entry;
+          }
+          if (!Array.isArray(entry.checkins)) { entry.checkins = []; }
+          entry.checkins = entry.checkins.filter(function (row) {
+            return row && typeof row.name === 'string' && row.name.trim();
+          });
+          if (!entry.created_at) {
+            entry.created_at = entry.updated_at ||
+              (entry.checkins[0] && entry.checkins[0].created_at) ||
+              new Date().toISOString();
+          }
+          if (!entry.updated_at) { entry.updated_at = entry.created_at; }
+        });
+        doc.app = APP_ID;
+        if (!doc.version) { doc.version = 1; }
+        return doc;
+      }
+
+      async function loadStore() {
+        if (!CONFIGURED) { throw new Error('数据存储尚未配置。'); }
+        var response = await storeFetch({
+          cache: 'no-store',
+          headers: { Accept: 'application/json' }
+        });
+        var text = await response.text();
+        if (!response.ok) {
+          throw new Error('云端数据读取失败（HTTP ' + response.status + '）。');
+        }
+        var data = null;
+        if (text) {
+          try { data = JSON.parse(text); }
+          catch (error) { throw new Error('云端数据格式异常。'); }
+        }
+        return normalizeStore(data);
+      }
+
+      async function saveStore(doc) {
+        if (!CONFIGURED) { throw new Error('数据存储尚未配置。'); }
+        doc.updatedAt = new Date().toISOString();
+        var response = await storeFetch({
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json'
+          },
+          body: JSON.stringify(doc)
+        });
+        var text = await response.text();
+        if (!response.ok) {
+          throw new Error('云端数据保存失败（HTTP ' + response.status + '）。');
+        }
+        var data = null;
+        if (text) {
+          try { data = JSON.parse(text); }
+          catch (error) { throw new Error('云端数据格式异常。'); }
+        }
+        return normalizeStore(data);
+      }
+
+      function stripEq(value) {
+        return String(value || '').replace(/^eq\./, '');
+      }
+
+      function getCheckins(doc, session) {
+        var entry = doc.sessions[session];
+        if (!entry || !Array.isArray(entry.checkins)) { return []; }
+        return entry.checkins.slice().sort(function (a, b) {
+          return String(a.created_at || '').localeCompare(String(b.created_at || ''));
+        });
+      }
+
+      function recentSessions(doc) {
+        return Object.keys(doc.sessions).map(function (session) {
+          var entry = doc.sessions[session] || {};
+          var last = entry.updated_at || entry.created_at || '';
+          (entry.checkins || []).forEach(function (row) {
+            if (row && row.created_at && String(row.created_at) > String(last)) {
+              last = row.created_at;
+            }
+          });
+          return { session: session, last: last };
+        }).sort(function (a, b) {
+          return String(b.last).localeCompare(String(a.last));
+        });
+      }
+
+      async function ensureSession(session) {
+        for (var attempt = 0; attempt < 5; attempt += 1) {
+          var doc = await loadStore();
+          if (doc.sessions[session]) { return true; }
+          var now = new Date().toISOString();
+          doc.sessions[session] = { created_at: now, updated_at: now, checkins: [] };
+          doc.updatedAt = now;
+          await saveStore(doc);
+          await sleep(150 + Math.floor(Math.random() * 250));
+          var verify = await loadStore();
+          if (verify.sessions[session]) { return true; }
+        }
+        throw new Error('创建签到码失败，请稍后重试。');
+      }
+
+      async function insertCheckin(session, name) {
+        for (var attempt = 0; attempt < 6; attempt += 1) {
+          var doc = await loadStore();
+          var entry = doc.sessions[session];
+          if (entry && entry.checkins.some(function (row) { return row.name === name; })) {
+            var duplicateError = new Error('你已签到');
+            duplicateError.status = 409;
+            throw duplicateError;
+          }
+          if (!entry) {
+            var now = new Date().toISOString();
+            entry = { created_at: now, updated_at: now, checkins: [] };
+            doc.sessions[session] = entry;
+          }
+          var record = { name: name, created_at: new Date().toISOString() };
+          entry.checkins.push(record);
+          entry.updated_at = record.created_at;
+          doc.updatedAt = record.created_at;
+          await saveStore(doc);
+          await sleep(240 + Math.floor(Math.random() * 420));
+
+          var verify = await loadStore();
+          var verifyEntry = verify.sessions[session];
+          if (verifyEntry && verifyEntry.checkins.some(function (row) {
+            return row.name === name && row.created_at === record.created_at;
+          })) {
+            await sleep(160);
+            var secondVerify = await loadStore();
+            var secondEntry = secondVerify.sessions[session];
+            if (secondEntry && secondEntry.checkins.some(function (row) {
+              return row.name === name && row.created_at === record.created_at;
+            })) {
+              return [{ id: record.created_at, name: name, session: session, created_at: record.created_at }];
+            }
+          }
+          if (verifyEntry && verifyEntry.checkins.some(function (row) { return row.name === name; })) {
+            var concurrentDuplicate = new Error('你已签到');
+            concurrentDuplicate.status = 409;
+            throw concurrentDuplicate;
+          }
+        }
+        throw new Error('签到写入冲突，请再点一次签到。');
+      }
+
+      async function api(path, options) {
+        if (!CONFIGURED) { throw new Error('数据存储尚未配置。'); }
+        var method = options && options.method ? String(options.method).toUpperCase() : 'GET';
+        var questionIndex = path.indexOf('?');
+        var endpoint = questionIndex === -1 ? path : path.slice(0, questionIndex);
+        var queryString = questionIndex === -1 ? '' : path.slice(questionIndex + 1);
+        var params = new URLSearchParams(queryString);
+        if (endpoint !== 'checkins') { throw new Error('不支持的数据请求。'); }
+
+        if (method === 'GET') {
+          var doc = await loadStore();
+          var select = params.get('select') || '';
+
+          if (select === 'session') {
+            var limit = Number(params.get('limit') || 0);
+            var sessions = recentSessions(doc);
+            if (limit > 0) { sessions = sessions.slice(0, limit); }
+            return sessions.map(function (item) { return { session: item.session }; });
+          }
+
+          var session = stripEq(params.get('session'));
+          var name = stripEq(params.get('name'));
+          var rows = getCheckins(doc, session).map(function (row, index) {
+            return { id: index + 1, name: row.name, created_at: row.created_at };
+          });
+          if (name) {
+            rows = rows.filter(function (row) { return row.name === name; });
+          }
+          var recordLimit = Number(params.get('limit') || 0);
+          if (recordLimit > 0) { rows = rows.slice(0, recordLimit); }
+          return rows;
+        }
+
+        if (method === 'POST') {
+          var parsed;
+          try { parsed = JSON.parse(options.body || '[]'); }
+          catch (error) { throw new Error('签到数据格式错误。'); }
+          var item = Array.isArray(parsed) ? parsed[0] : parsed;
+          if (!item || !item.name || !item.session) {
+            throw new Error('签到数据不完整。');
+          }
+          return insertCheckin(String(item.session), String(item.name));
+        }
+
+        throw new Error('不支持的数据请求。');
+      }
+
+      function fetchCheckins(session) {
+        var params = new URLSearchParams();
+        params.set('select', 'id,name,created_at');
+        params.set('session', 'eq.' + session);
+        params.set('order', 'created_at.asc,id.asc');
+        return api('checkins?' + params.toString());
+      }
+
+      /* ======================== 管理员视图渲染 ======================== */
+
+      function renderSession() {
+        var session = state.currentSession;
+        var hasSession = Boolean(session);
+
+        el.adminSessionText.textContent = hasSession ? session : '尚未生成';
+        el.adminSessionText.classList.toggle('is-empty', !hasSession);
+        el.qrSessionText.textContent = hasSession ? session : '—';
+        el.refreshBtn.disabled = !hasSession || !CONFIGURED;
+        el.exportBtn.disabled = !hasSession || !CONFIGURED;
+
+        renderQr(session);
+      }
+
+      function renderQr(session) {
+        el.qrBox.innerHTML = '';
+        el.qrBox.removeAttribute('aria-label');
+
+        if (!session) {
+          var placeholder = document.createElement('div');
+          placeholder.className = 'qr-placeholder';
+          placeholder.innerHTML = '<span><strong>还没有二维码</strong>点击上方「生成新签到码」</span>';
+          el.qrBox.appendChild(placeholder);
+          el.qrBox.setAttribute('aria-label', '尚未生成签到二维码');
+          el.linkBox.hidden = true;
+          el.checkinLink.removeAttribute('href');
+          el.checkinLink.textContent = '';
+          el.qrStatus.textContent = '等待生成';
+          el.qrStatus.className = 'qr-status is-idle';
+          return;
+        }
+
+        var url = buildCheckinUrl(session);
+        el.linkBox.hidden = false;
+        el.checkinLink.href = url;
+        el.checkinLink.textContent = url;
+
+        if (typeof QRCode === 'undefined') {
+          var error = document.createElement('div');
+          if (window.__qrcodeLoadFailed) {
+            error.className = 'qr-error';
+            error.textContent = '二维码组件加载失败。请检查网络后刷新，或直接复制下方链接。';
+            el.qrBox.setAttribute('aria-label', '二维码加载失败');
+            el.qrStatus.textContent = '组件加载失败';
+          } else {
+            error.className = 'qr-placeholder';
+            error.innerHTML = '<span><strong>正在加载二维码…</strong>稍等片刻</span>';
+            el.qrBox.setAttribute('aria-label', '正在加载二维码');
+            el.qrStatus.textContent = '准备中';
+          }
+          el.qrBox.appendChild(error);
+          el.qrStatus.className = 'qr-status is-idle';
+          return;
+        }
+
+        try {
+          new QRCode(el.qrBox, {
+            text: url,
+            width: 220,
+            height: 220,
+            colorDark: '#111827',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.M
+          });
+          el.qrBox.setAttribute('aria-label', '签到二维码，内容为 ' + url);
+          var image = el.qrBox.querySelector('img');
+          if (image) { image.alt = '签到二维码'; }
+          el.qrStatus.textContent = '可以扫码';
+          el.qrStatus.className = 'qr-status';
+        } catch (error) {
+          var qrError = document.createElement('div');
+          qrError.className = 'qr-error';
+          qrError.textContent = '二维码生成失败，请刷新页面重试，或使用下方链接。';
+          el.qrBox.appendChild(qrError);
+          el.qrBox.setAttribute('aria-label', '二维码生成失败');
+          el.qrStatus.textContent = '生成失败';
+          el.qrStatus.className = 'qr-status is-idle';
+        }
+      }
+
+      function renderRecords(rows, emptyText) {
+        state.records = rows || [];
+        el.adminCount.textContent = String(state.records.length);
+        el.recordsBody.innerHTML = '';
+
+        if (!state.records.length) {
+          var emptyRow = document.createElement('tr');
+          var emptyCell = document.createElement('td');
+          emptyCell.colSpan = 3;
+          emptyCell.className = 'empty-cell';
+          emptyCell.textContent = emptyText || (state.currentSession
+            ? '暂无签到记录，等待团员扫码。'
+            : '生成签到码后，记录会显示在这里。');
+          emptyRow.appendChild(emptyCell);
+          el.recordsBody.appendChild(emptyRow);
+          return;
+        }
+
+        var fragment = document.createDocumentFragment();
+        state.records.forEach(function (record, index) {
+          var row = document.createElement('tr');
+
+          var indexCell = document.createElement('td');
+          indexCell.textContent = String(index + 1);
+
+          var nameCell = document.createElement('td');
+          nameCell.textContent = record.name || '（未填写）';
+
+          var timeCell = document.createElement('td');
+          timeCell.textContent = formatTime(record.created_at);
+
+          row.appendChild(indexCell);
+          row.appendChild(nameCell);
+          row.appendChild(timeCell);
+          fragment.appendChild(row);
+        });
+        el.recordsBody.appendChild(fragment);
+      }
+
+      function renderLoadingRecords() {
+        el.adminCount.textContent = '…';
+        el.recordsBody.innerHTML = '';
+        var row = document.createElement('tr');
+        var cell = document.createElement('td');
+        cell.colSpan = 3;
+        cell.className = 'empty-cell';
+        cell.textContent = '正在读取签到记录…';
+        row.appendChild(cell);
+        el.recordsBody.appendChild(row);
+      }
+
+      function renderSessionOptions(sessions) {
+        var previous = el.historySelect.value;
+        el.historySelect.innerHTML = '';
+
+        var placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = sessions.length ? '选择最近的 session' : '暂无历史 session';
+        el.historySelect.appendChild(placeholder);
+
+        sessions.forEach(function (session) {
+          var option = document.createElement('option');
+          option.value = session;
+          option.textContent = session;
+          el.historySelect.appendChild(option);
+        });
+
+        if (previous && sessions.indexOf(previous) !== -1) {
+          el.historySelect.value = previous;
+        }
+        el.historySelect.disabled = false;
+      }
+
+      /* ======================== 管理员数据操作 ======================== */
+
+      async function loadRecords() {
+        var session = state.currentSession;
+        if (!session) {
+          renderRecords([], '生成签到码后，记录会显示在这里。');
+          return false;
+        }
+
+        var seq = ++state.recordsSeq;
+        renderLoadingRecords();
+
+        try {
+          var rows = await fetchCheckins(session);
+          if (seq !== state.recordsSeq || session !== state.currentSession) { return false; }
+          if (!Array.isArray(rows)) { throw new Error('返回的数据格式不正确。'); }
+          renderRecords(rows);
+          return true;
+        } catch (error) {
+          if (seq !== state.recordsSeq || session !== state.currentSession) { return false; }
+          renderRecords([], '记录读取失败，请点击「刷新记录」重试。');
+          setStatus(el.adminStatus, error.message || '读取记录失败。', 'error');
+          return false;
+        }
+      }
+
+      async function loadRecentSessions() {
+        if (!CONFIGURED) {
+          el.historySelect.innerHTML = '<option value="">未配置数据存储</option>';
+          el.historySelect.disabled = true;
+          if (el.historyHint) { el.historyHint.textContent = '数据存储尚未配置。'; }
+          return;
+        }
+
+        var seq = ++state.recentSeq;
+        el.historySelect.disabled = true;
+        try {
+          var params = new URLSearchParams();
+          params.set('select', 'session');
+          params.set('order', 'created_at.desc');
+          params.set('limit', '1000');
+          var rows = await api('checkins?' + params.toString());
+          if (seq !== state.recentSeq) { return; }
+
+          var seen = Object.create(null);
+          var sessions = [];
+          (Array.isArray(rows) ? rows : []).forEach(function (row) {
+            var session = row && typeof row.session === 'string' ? row.session : '';
+            if (session && !seen[session]) {
+              seen[session] = true;
+              sessions.push(session);
+            }
+          });
+          renderSessionOptions(sessions.slice(0, 30));
+          if (el.historyHint) {
+            el.historyHint.textContent = '已从云端读取 ' + sessions.length + ' 个历史 session；选中后会加载到上方记录表中。';
+          }
+        } catch (error) {
+          if (seq !== state.recentSeq) { return; }
+          el.historySelect.innerHTML = '<option value="">历史 session 读取失败</option>';
+          el.historySelect.disabled = true;
+          if (el.historyHint) { el.historyHint.textContent = '历史 session 读取失败：' + (error.message || '请检查网络后刷新。'); }
+        }
+      }
+
+      async function setCurrentSession(session, options) {
+        var opts = options || {};
+        state.currentSession = session;
+        state.recordsSeq += 1;
+        safeStorageSet(STORAGE_KEY, session);
+        el.historyInput.value = session;
+        el.historySelect.value = '';
+
+        renderSession();
+        renderRecords([]);
+        setStatus(el.adminStatus, '', '');
+
+        if (!opts.skipLoad) {
+          var ok = await loadRecords();
+          if (ok && opts.successPrefix) {
+            setStatus(el.adminStatus,
+              opts.successPrefix + '，共 ' + state.records.length + ' 人签到。',
+              'success');
+          }
+        }
+        if (opts.refreshRecent) { loadRecentSessions(); }
+        return true;
+      }
+
+      async function handleGenerate() {
+        var session = makeSessionId();
+        var button = el.generateBtn;
+        setButtonLoading(button, true, '生成中…');
+
+        try {
+          await ensureSession(session);
+          await setCurrentSession(session, { skipLoad: true });
+          setStatus(el.adminStatus, '已生成新的签到码，等待团员扫码签到。', 'success');
+          loadRecentSessions();
+        } catch (error) {
+          setStatus(el.adminStatus, '生成签到码失败：' + (error.message || '请稍后重试。'), 'error');
+        } finally {
+          setButtonLoading(button, false);
+        }
+      }
+
+      async function handleRefresh() {
+        if (!state.currentSession) {
+          setStatus(el.adminStatus, '请先生成签到码。', 'warning');
+          return;
+        }
+
+        setButtonLoading(el.refreshBtn, true, '刷新中…');
+
+        var ok = await loadRecords();
+        if (ok) {
+          setStatus(el.adminStatus,
+            '已刷新，共 ' + state.records.length + ' 人签到。',
+            'success');
+        }
+        loadRecentSessions();
+
+        setButtonLoading(el.refreshBtn, false);
+        el.refreshBtn.disabled = !state.currentSession || !CONFIGURED;
+      }
+
+      function csvEscape(value) {
+        return '"' + String(value == null ? '' : value).replace(/"/g, '""') + '"';
+      }
+
+      function handleExport() {
+        if (!state.currentSession) {
+          setStatus(el.adminStatus, '请先生成签到码。', 'warning');
+          return;
+        }
+        if (!state.records.length) {
+          setStatus(el.adminStatus, '当前 session 暂无签到记录，无法导出。', 'warning');
+          return;
+        }
+
+        var lines = [['序号', '姓名', '签到时间']];
+        state.records.forEach(function (record, index) {
+          lines.push([String(index + 1), record.name || '', formatTime(record.created_at)]);
+        });
+
+        var csv = '\uFEFF' + lines.map(function (line) {
+          return line.map(csvEscape).join(',');
+        }).join('\r\n');
+
+        var safeSession = state.currentSession.replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 80);
+        var filename = 'checkins_' + safeSession + '.csv';
+        var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        var url = URL.createObjectURL(blob);
+        var anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+
+        setStatus(el.adminStatus, '已导出 ' + state.records.length + ' 条记录：' + filename, 'success');
+      }
+
+      async function handleHistoryQuery() {
+        var session = el.historyInput.value.trim();
+        if (!session) {
+          setStatus(el.adminStatus, '请输入要查询的 session。', 'warning');
+          el.historyInput.focus();
+          return;
+        }
+
+        el.historyInput.value = session;
+        setButtonLoading(el.historyQueryBtn, true, '查询中…');
+        await setCurrentSession(session, {
+          successPrefix: '已加载历史 session ' + session,
+          refreshRecent: true
+        });
+        setButtonLoading(el.historyQueryBtn, false);
+      }
+
+      function handleHistorySelect() {
+        var session = el.historySelect.value;
+        if (!session) { return; }
+        el.historyInput.value = session;
+        setButtonLoading(el.historyQueryBtn, true, '加载中…');
+        setCurrentSession(session, {
+          successPrefix: '已加载 session ' + session,
+          refreshRecent: false
+        }).finally(function () {
+          setButtonLoading(el.historyQueryBtn, false);
+        });
+      }
+
+      /* ======================== 团员签到视图 ======================== */
+
+      function parseCheckinSession() {
+        var hash = window.location.hash || '';
+        if (!/^#checkin(?:\?|$)/.test(hash)) { return ''; }
+        var queryString = hash.indexOf('?') === -1 ? '' : hash.slice(hash.indexOf('?') + 1);
+        var params = new URLSearchParams(queryString);
+        return String(params.get('session') || '').trim().slice(0, 120);
+      }
+
+      function enterAdmin() {
+        el.adminView.hidden = false;
+        el.checkinView.hidden = true;
+        document.body.classList.remove('is-checkin');
+        document.title = '对面合唱团 · 签到管理';
+
+        el.configWarning.hidden = CONFIGURED;
+        el.historyQueryBtn.disabled = !CONFIGURED;
+        el.historyInput.disabled = !CONFIGURED;
+        if (!CONFIGURED) {
+          el.historySelect.disabled = true;
+        }
+
+        if (!state.adminBooted) {
+          state.adminBooted = true;
+          var savedSession = safeStorageGet(STORAGE_KEY).trim().slice(0, 120);
+          if (savedSession) {
+            setCurrentSession(savedSession, {
+              successPrefix: '已恢复上次的 session ' + savedSession,
+              refreshRecent: true
+            });
+          } else {
+            renderSession();
+            renderRecords([]);
+            loadRecentSessions();
+          }
+        } else {
+          renderSession();
+        }
+      }
+
+      function enterCheckin() {
+        el.adminView.hidden = true;
+        el.checkinView.hidden = false;
+        document.body.classList.add('is-checkin');
+        document.title = '对面合唱团 · 签到';
+
+        var session = parseCheckinSession();
+        var changed = session !== state.checkinSession;
+        state.checkinSession = session;
+
+        el.checkinSessionText.textContent = session || '无效 session';
+
+        if (!session) {
+          el.checkinForm.hidden = true;
+          setCheckinMessage('签到链接无效，请联系管理员重新生成签到码。', 'error');
+          return;
+        }
+
+        el.checkinForm.hidden = false;
+        if (changed) {
+          el.memberName.value = '';
+          setCheckinMessage('', '');
+        }
+
+        if (!CONFIGURED) {
+          el.checkinBtn.disabled = true;
+          el.memberName.disabled = true;
+          setCheckinMessage('签到系统尚未配置，请联系管理员。', 'error');
+          return;
+        }
+
+        el.memberName.disabled = false;
+        el.checkinBtn.disabled = state.checkinBusy;
+      }
+
+      async function handleCheckinSubmit(event) {
+        event.preventDefault();
+        if (state.checkinBusy) { return; }
+
+        var session = state.checkinSession;
+        if (!session) {
+          setCheckinMessage('签到链接无效，请联系管理员重新生成签到码。', 'error');
+          return;
+        }
+
+        var name = el.memberName.value.trim();
+        if (!name) {
+          setCheckinMessage('请先输入姓名。', 'warning');
+          el.memberName.focus();
+          return;
+        }
+
+        if (!CONFIGURED) {
+          setCheckinMessage('签到系统尚未配置，请联系管理员。', 'error');
+          return;
+        }
+
+        state.checkinBusy = true;
+        el.checkinBtn.disabled = true;
+        el.checkinBtn.textContent = '签到中…';
+        el.memberName.disabled = true;
+
+        try {
+          var duplicateParams = new URLSearchParams();
+          duplicateParams.set('select', 'id');
+          duplicateParams.set('session', 'eq.' + session);
+          duplicateParams.set('name', 'eq.' + name);
+          duplicateParams.set('limit', '1');
+
+          var existing = await api('checkins?' + duplicateParams.toString());
+          if (Array.isArray(existing) && existing.length > 0) {
+            setCheckinMessage('你已签到', 'warning');
+            return;
+          }
+
+          var inserted = await api('checkins', {
+            method: 'POST',
+            body: JSON.stringify([{ name: name, session: session }])
+          });
+
+          var createdAt = Array.isArray(inserted) && inserted[0]
+            ? inserted[0].created_at
+            : new Date().toISOString();
+
+          el.memberName.value = '';
+          el.memberName.blur();
+          setCheckinMessage('签到成功，' + name + '，' + formatTime(createdAt), 'success');
+        } catch (error) {
+          if (error.status === 409) {
+            setCheckinMessage('你已签到', 'warning');
+          } else {
+            setCheckinMessage('签到失败：' + (error.message || '请稍后重试。'), 'error');
+          }
+        } finally {
+          state.checkinBusy = false;
+          el.memberName.disabled = false;
+          el.checkinBtn.disabled = false;
+          el.checkinBtn.textContent = '签到';
+        }
+      }
+
+      /* ======================== 路由与事件绑定 ======================== */
+
+      function route() {
+        var hash = window.location.hash || '';
+        if (/^#checkin(?:\?|$)/.test(hash)) {
+          enterCheckin();
+        } else {
+          enterAdmin();
+        }
+        document.documentElement.classList.remove('route-checkin');
+      }
+
+      function refreshQrIfReady() {
+        if (state.currentSession && !el.adminView.hidden) {
+          renderQr(state.currentSession);
+        }
+      }
+
+      function bindEvents() {
+        el.generateBtn.addEventListener('click', handleGenerate);
+        el.refreshBtn.addEventListener('click', handleRefresh);
+        el.exportBtn.addEventListener('click', handleExport);
+
+        el.historyQueryBtn.addEventListener('click', handleHistoryQuery);
+        el.historyInput.addEventListener('keydown', function (event) {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            handleHistoryQuery();
+          }
+        });
+        el.historySelect.addEventListener('change', handleHistorySelect);
+
+        el.checkinForm.addEventListener('submit', handleCheckinSubmit);
+        window.addEventListener('hashchange', route);
+        window.addEventListener('qrcode-ready', refreshQrIfReady);
+        window.addEventListener('qrcode-error', refreshQrIfReady);
+      }
+
+      bindEvents();
+      route();
+    })();
+  </script>
+</body>
+</html>
