@@ -719,31 +719,6 @@
       font-size: 14px;
     }
 
-    .checkin-session-box {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin: 21px 0 23px;
-      padding: 11px 13px;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      background: #f8fafc;
-    }
-
-    .checkin-session-box .session-label { margin: 0; }
-
-    .checkin-session-box code {
-      max-width: 68%;
-      overflow: hidden;
-      color: var(--ink-soft);
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 12px;
-      font-weight: 700;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
     .checkin-form { display: grid; gap: 15px; }
 
     .checkin-form .field-label {
@@ -814,15 +789,6 @@
       color: var(--red);
       border-color: var(--red-line);
       background: var(--red-bg);
-    }
-
-    .checkin-footnote {
-      margin: 21px 0 0;
-      padding-top: 16px;
-      border-top: 1px solid var(--line);
-      color: var(--muted-light);
-      font-size: 12px;
-      text-align: center;
     }
 
     @media (max-width: 900px) {
@@ -1034,11 +1000,6 @@
       <h1 id="checkinTitle">对面合唱团 · 签到</h1>
       <p class="checkin-intro">填写真实姓名，完成本次排练签到。</p>
 
-      <div class="checkin-session-box">
-        <span class="session-label">当前 SESSION</span>
-        <code id="checkinSessionText">—</code>
-      </div>
-
       <form id="checkinForm" class="checkin-form" novalidate>
         <label class="field-label" for="memberName">你的姓名</label>
         <input id="memberName" class="name-input" type="text" name="name"
@@ -1048,7 +1009,6 @@
 
       <p id="checkinMessage" class="checkin-message" role="status" aria-live="polite"></p>
 
-      <p class="checkin-footnote">提交即表示你已到场。如姓名填错，请联系管理员。</p>
     </main>
   </div>
 
@@ -1107,7 +1067,6 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
         checkinForm: $('checkinForm'),
         memberName: $('memberName'),
         checkinBtn: $('checkinBtn'),
-        checkinSessionText: $('checkinSessionText'),
         checkinMessage: $('checkinMessage')
       };
 
@@ -1818,7 +1777,6 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
         var changed = session !== state.checkinSession;
         state.checkinSession = session;
 
-        el.checkinSessionText.textContent = session || '无效 session';
 
         if (!session) {
           el.checkinForm.hidden = true;
